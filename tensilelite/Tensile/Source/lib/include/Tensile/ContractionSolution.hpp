@@ -263,11 +263,11 @@ namespace Tensile
         /**
    * Calculate required workspace size.
    */
-        size_t requiredWorkspaceSize(Problem const& problem) const;
+        size_t requiredWorkspaceSize(Problem const& problem, Hardware const& hardware) const;
         size_t requiredWorkspaceSizeGroupedGemm(std::vector<Problem> const& problems) const;
         size_t requiredHostSizeGroupedGemmSingle(Problem const& problem) const;
 
-        size_t getSKGrid(Hardware const& hardware, size_t tiles) const;
+        size_t getSKGrid(Problem const& problem, Hardware const& hardware, size_t tiles) const;
         size_t partialTileSize(size_t skGrid) const;
 
         static float computeGranularity(float x);
