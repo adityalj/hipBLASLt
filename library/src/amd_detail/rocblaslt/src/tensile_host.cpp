@@ -2019,7 +2019,7 @@ void _convertToHeuristicResultArray(
         heuristicResultsArray[i].algo.max_workspace_bytes = maxWorkSpaceBytes;
         heuristicResultsArray[i].algo.fallback            = fallbackCount-- > 0 ? true : false;
         heuristicResultsArray[i].state                    = rocblaslt_status_success;
-        heuristicResultsArray[i].workspaceSize = solution->requiredWorkspaceSize(problem,nullptr);
+        heuristicResultsArray[i].workspaceSize = solution->requiredWorkspaceSize(problem, nullptr);
     }
     for(size_t i = *returnAlgoCount; i < requestedAlgoCount; i++)
     {
@@ -2248,7 +2248,7 @@ rocblaslt_status getAllSolutions(MyProblem&                                     
         heuristicResults[i].algo.fallback            = false;
         heuristicResults[i].state                    = rocblaslt_status_success;
         if constexpr(std::is_same<MyProblem, Tensile::ContractionProblemGemm>::value)
-            heuristicResults[i].workspaceSize = solution->requiredWorkspaceSize(prob,hardware);
+            heuristicResults[i].workspaceSize = solution->requiredWorkspaceSize(prob, hardware);
         else
             heuristicResults[i].workspaceSize = 0;
         i++;
@@ -2444,7 +2444,7 @@ rocblaslt_status isSolutionSupported(rocblaslt_handle            handle,
                 bool isSup = (*solution->hardwarePredicate)(*hardware)
                              && (*solution->problemPredicate)(tensile_prob);
                 if(isSup)
-                    *workspaceSizeInBytes = solution->requiredWorkspaceSize(tensile_prob,hardware);
+                    *workspaceSizeInBytes = solution->requiredWorkspaceSize(tensile_prob, hardware);
                 tensile_prob.setUseBias(useBias);
                 tensile_prob.setActivationType(actType);
                 tensile_prob.setUseScaleAlphaVec(useScaleAlphaVec);
@@ -2474,7 +2474,7 @@ rocblaslt_status isSolutionSupported(rocblaslt_handle            handle,
         }
         else
         {
-            *workspaceSizeInBytes = solution->requiredWorkspaceSize(tensile_prob,hardware);
+            *workspaceSizeInBytes = solution->requiredWorkspaceSize(tensile_prob, hardware);
         }
     }
     else if constexpr(std::is_same<MyProblem, Tensile::ContractionProblemGroupedGemm>::value)

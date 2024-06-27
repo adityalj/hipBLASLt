@@ -724,7 +724,7 @@ namespace Tensile
             size_t cuCount = 0;
             
             auto   tiles   = problem.getNumTiles(sizeMapping);
-            size_t skGrid  = getSKGrid(problem,*hardware, tiles);
+            size_t skGrid  = getSKGrid(problem, *hardware, tiles);
             // StreamK workspace + flags
             args.template append<void const*>("ws", inputs.ws);
             void*  ws          = inputs.ws;
@@ -1011,7 +1011,7 @@ namespace Tensile
             cuCount = pAMDGPU->computeUnitCount;
             if(sizeMapping.streamK != 0)
             {
-                skGrid             = getSKGrid(problem,hardware, tiles);
+                skGrid             = getSKGrid(problem, hardware, tiles);
                 // TODO enable grid size change once code gen changes are implemented
                 // rv.numWorkGroups.x = skGrid;
                 // rv.numWorkGroups.y = 1;
@@ -1230,7 +1230,7 @@ namespace Tensile
                 }
 
                 if constexpr(std::is_same<KA, KernelArguments>::value)
-                    workspaceOffsetInByte += requiredWorkspaceSize(problem,hardware);
+                    workspaceOffsetInByte += requiredWorkspaceSize(problem, hardware);
             }
         }
 
@@ -2530,7 +2530,7 @@ namespace Tensile
                     generateOutputConversionCallGroupedGemm<true>(problems, inputs, hardware, h_args));
             else
                 rv.push_back(
-                    generateOutputConversionCallGroupedGemm<false>(problems, inputs,hardware, h_args));
+                    generateOutputConversionCallGroupedGemm<false>(problems, inputs, hardware, h_args));
         }
 
         if(debug)
