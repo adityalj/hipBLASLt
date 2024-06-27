@@ -1186,6 +1186,7 @@ namespace Tensile
     KernelInvocation ContractionSolution::generateSingleCallGroupedGemm(
         std::vector<ContractionSolution::Problem> const& problems,
         ContractionSolution::GroupedInputs const&        inputs,
+        Hardware const&                                hardware,
         KA&                                              h_args,
         void const*                                      userArgs) const
     {
@@ -1229,7 +1230,7 @@ namespace Tensile
                 }
 
                 if constexpr(std::is_same<KA, KernelArguments>::value)
-                    workspaceOffsetInByte += requiredWorkspaceSize(problem);
+                    workspaceOffsetInByte += requiredWorkspaceSize(problem,hardware);
             }
         }
 
@@ -1790,6 +1791,7 @@ namespace Tensile
     KernelInvocation ContractionSolution::generateOutputConversionCallGroupedGemm(
         std::vector<ContractionSolution::Problem> const& problems,
         ContractionSolution::GroupedInputs const&        inputs,
+        Hardware const&                                 hardware,
         KA&                                              h_args) const
     {
         KernelInvocation rv;
@@ -1833,7 +1835,7 @@ namespace Tensile
             outputConversionCallArgs<T_Debug>(
                 problem, inputs.grouped[idx], workspaceOffsetInByte, h_args);
             if constexpr(std::is_same<KA, KernelArguments>::value)
-                workspaceOffsetInByte += requiredWorkspaceSize(problem);
+                workspaceOffsetInByte += requiredWorkspaceSize(problem, hardware);
         }
 
         if constexpr(std::is_same<KA, KernelArguments>::value)
@@ -2517,18 +2519,18 @@ namespace Tensile
         // }
 
         if(debug)
-            rv.push_back(generateSingleCallGroupedGemm<true>(problems, inputs, h_args));
+            rv.push_back(generateSingleCallGroupedGemm<true>(problems, inputs, hardware, h_args));
         else
-            rv.push_back(generateSingleCallGroupedGemm<false>(problems, inputs, h_args));
+            rv.push_back(generateSingleCallGroupedGemm<false>(problems, inputs, hardware, h_args));
 
         if(sizeMapping.globalAccumulation == 2 && gsu > 1)
         {
             if(debug)
                 rv.push_back(
-                    generateOutputConversionCallGroupedGemm<true>(problems, inputs, h_args));
+                    generateOutputConversionCallGroupedGemm<true>(problems, inputs, hardware, h_args));
             else
                 rv.push_back(
-                    generateOutputConversionCallGroupedGemm<false>(problems, inputs, h_args));
+                    generateOutputConversionCallGroupedGemm<false>(problems, inputs,hardware, h_args));
         }
 
         if(debug)
@@ -2571,9 +2573,9 @@ namespace Tensile
         // Here we only update the pointer
         int h_args = 1; // Dummy
         if(debug)
-            rv.push_back(generateSingleCallGroupedGemm<true>(problems, inputs, h_args, dUA));
+            rv.push_back(generateSingleCallGroupedGemm<true>(problems, inputs, hardware, h_args, dUA));
         else
-            rv.push_back(generateSingleCallGroupedGemm<false>(problems, inputs, h_args, dUA));
+            rv.push_back(generateSingleCallGroupedGemm<false>(problems, inputs, hardware, h_args, dUA));
 
         auto gsu = problems[0].getParams().gsu() > 0 ? problems[0].getParams().gsu()
                                                      : sizeMapping.globalSplitU;
@@ -2742,54 +2744,39 @@ namespace Tensile
         return pass;
     }
 
-    size_t ContractionSolution::requiredWorkspaceSize(Problem const& problem) const
+    size_t ContractionSolution::requiredWorkspaceSize(Problem const&  problem,
+                                                      Hardware const& hardware) const
     {
-        // TODO: Pass GSU from problem and change value[2] to gsu if gsu != default value
         size_t size = 0;
-        size_t gsu
-            = problem.getParams().gsu() > 0 ? problem.getParams().gsu() : sizeMapping.globalSplitU;
-        size_t gsuMultiplier = gsu > 1 ? gsu : 0;
 
-        size += problem.d().totalLogicalElements() * sizeMapping.workspaceSizePerElemC
-                * gsuMultiplier;
-        if(problemType.useGradient && problemType.useBias
-           && problem.getParams().biasEnum() != DataType::None)
+        if(sizeMapping.streamK > 0 && sizeMapping.streamKAtomic == 0)
         {
-            if(problem.biasSrc() == ContractionProblemGemm::TENSOR::A)
-            {
-                size += problem.freeSizeA(0) * sizeMapping.workspaceSizePerElemBias * gsuMultiplier;
-            }
-            else if(problem.biasSrc() == ContractionProblemGemm::TENSOR::B)
-            {
-                size += problem.freeSizeB(0) * sizeMapping.workspaceSizePerElemBias * gsuMultiplier;
-            }
-            else if(problem.biasSrc() == ContractionProblemGemm::TENSOR::D && (gsuMultiplier == 0))
-            {
-                size += problem.d().totalLogicalElements() * sizeMapping.workspaceSizePerElemBias
-                        * gsu;
-            }
+            auto   tiles  = problem.getNumTiles(sizeMapping);
+            size_t skGrid = getSKGrid(problem, hardware, tiles);
+            // Get space required for partial tiles
+            size += partialTileSize(skGrid);
+            // Add space for flags
+            // Flags for partial tiles - dword per flag for fast addressing and comparisons
+            // If tiles is evenly divided by grid size flags are not needed (DP mode)
+            if(tiles % skGrid != 0)
+                size += skGrid * 4;
+            // size *= batches; // TODO need tile and flag per batch
         }
-
-        // Custom kernel synchronizer
-        if(gsu > 1 && sizeMapping.globalAccumulation == 3)
-        {
-            size += (int)ceil(problem.d().sizes()[0] / (float)sizeMapping.macroTile.x)
-                    * (int)ceil(problem.d().sizes()[1] / (float)sizeMapping.macroTile.y)
-                    * sizeMapping.waveNum * sizeof(int32_t);
-        }
+        else
+            size += problem.d().totalLogicalElements() * sizeMapping.workspaceSizePerElemC;
 
         return size;
     }
 
     size_t ContractionSolution::requiredWorkspaceSizeGroupedGemm(
-        std::vector<Problem> const& problems) const
+        std::vector<Problem> const& problems, Hardware const& hardware) const
     {
         size_t sizeInByte = 0;
 
         for(int i = 0; i < problems.size(); i++)
         {
             auto problem = problems[i];
-            sizeInByte += requiredWorkspaceSize(problem);
+            sizeInByte += requiredWorkspaceSize(problem, hardware);
         }
         ContractionGroupedInputs inputs;
         for(int i = 0; i < problems.size(); i++)
@@ -2798,9 +2785,9 @@ namespace Tensile
             inputs.grouped.push_back(unit);
         }
         auto h_args = KernelArgumentsCounter();
-        generateSingleCallGroupedGemm<false>(problems, inputs, h_args);
+        generateSingleCallGroupedGemm<false>(problems, inputs, hardware, h_args);
         if(sizeMapping.globalAccumulation)
-            generateOutputConversionCallGroupedGemm<false>(problems, inputs, h_args);
+            generateOutputConversionCallGroupedGemm<false>(problems, inputs, hardware, h_args);
         sizeInByte += h_args.size();
         return sizeInByte;
     }
@@ -2819,9 +2806,9 @@ namespace Tensile
             inputs.grouped.push_back(unit);
         }
         auto h_args = KernelArgumentsCounter();
-        generateSingleCallGroupedGemm<false>(tmpProblem, inputs, h_args);
+        generateSingleCallGroupedGemm<false>(tmpProblem, inputs, hardware, h_args);
         if(sizeMapping.globalAccumulation)
-            generateOutputConversionCallGroupedGemm<false>(tmpProblem, inputs, h_args);
+            generateOutputConversionCallGroupedGemm<false>(tmpProblem, inputs, hardware, h_args);
         return h_args.size();
     }
 

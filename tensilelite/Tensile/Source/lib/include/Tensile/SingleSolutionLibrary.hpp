@@ -136,7 +136,7 @@ namespace Tensile
                 if(!(*solution->hardwarePredicate)(hardware))
                     return std::shared_ptr<MySolution>();
 
-                size_t ws = (*solution).requiredWorkspaceSizeGroupedGemm(problems);
+                size_t ws = (*solution).requiredWorkspaceSizeGroupedGemm(problems, hardware);
 
                 for(int idx = 0; idx < problems.size(); idx++)
                 {
@@ -220,7 +220,7 @@ namespace Tensile
 
                 if(searchType == SolutionLibrarySearchType::DEFAULT)
                 {
-                    size_t ws = (*solution).requiredWorkspaceSizeGroupedGemm(problems);
+                    size_t ws = (*solution).requiredWorkspaceSizeGroupedGemm(problems, hardware);
 
                     for(int idx = 0; idx < problems.size(); idx++)
                     {

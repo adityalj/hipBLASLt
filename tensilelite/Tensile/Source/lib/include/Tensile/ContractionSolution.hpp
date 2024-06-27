@@ -264,8 +264,8 @@ namespace Tensile
    * Calculate required workspace size.
    */
         size_t requiredWorkspaceSize(Problem const& problem, Hardware const& hardware) const;
-        size_t requiredWorkspaceSizeGroupedGemm(std::vector<Problem> const& problems) const;
-        size_t requiredHostSizeGroupedGemmSingle(Problem const& problem) const;
+        size_t requiredWorkspaceSizeGroupedGemm(std::vector<Problem> const& problems, Hardware const& hardware) const;
+        size_t requiredHostSizeGroupedGemmSingle(Problem const& problem, Hardware const& hardware) const;
 
         size_t getSKGrid(Problem const& problem, Hardware const& hardware, size_t tiles) const;
         size_t partialTileSize(size_t skGrid) const;
@@ -384,6 +384,7 @@ namespace Tensile
         template <bool T_Debug, typename KA>
         KernelInvocation generateSingleCallGroupedGemm(std::vector<Problem> const& problems,
                                                        GroupedInputs const&        inputs,
+                                                       Hardware const&          hardware,
                                                        KA&                         h_args,
                                                        void const* userArgs = nullptr) const;
 
@@ -418,7 +419,8 @@ namespace Tensile
 
         template <bool T_Debug, typename KA>
         KernelInvocation generateOutputConversionCallGroupedGemm(
-            std::vector<Problem> const& problems, GroupedInputs const& inputs, KA& h_args) const;
+            std::vector<Problem> const& problems, GroupedInputs const& inputs,
+                    Hardware const& hardware, KA& h_args) const;
 
         template <bool T_Debug>
         KernelInvocation updateUserArgsOutputConversionCallGroupedGemm(

@@ -240,7 +240,7 @@ namespace Tensile
                     useSolution = true;
                     if(searchType == SolutionLibrarySearchType::DEFAULT)
                     {
-                        size_t ws = (*row.second).requiredWorkspaceSizeGroupedGemm(problems);
+                        size_t ws = (*row.second).requiredWorkspaceSizeGroupedGemm(problems, hardware);
 
                         for(int idx = 0; idx < problems.size(); idx++)
                         {
