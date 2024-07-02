@@ -1016,7 +1016,7 @@ namespace Tensile
             };
 
             struct AIGreaterThanEqual
-                : public Predicate_CRTP<AIGreaterThanEqual, ContractionProblem>
+                : public Predicate_CRTP<AIGreaterThanEqual, ContractionProblemGemm>
             {
                 enum
                 {
@@ -1037,12 +1037,12 @@ namespace Tensile
                     return "AIGreaterThanEqual";
                 }
 
-                virtual bool operator()(ContractionProblem const& problem) const override
+                virtual bool operator()(ContractionProblemGemm const& problem) const override
                 {
                     return problem.arithmeticIntensity() >= value;
                 }
 
-                virtual bool debugEval(ContractionProblem const& problem,
+                virtual bool debugEval(ContractionProblemGemm const& problem,
                                        std::ostream&             stream) const override
                 {
                     bool rv = (*this)(problem);
@@ -1054,7 +1054,7 @@ namespace Tensile
                 }
             };
 
-            struct AILessThanEqual : public Predicate_CRTP<AILessThanEqual, ContractionProblem>
+            struct AILessThanEqual : public Predicate_CRTP<AILessThanEqual, ContractionProblemGemm>
             {
                 enum
                 {
@@ -1075,12 +1075,12 @@ namespace Tensile
                     return "AILessThanEqual";
                 }
 
-                virtual bool operator()(ContractionProblem const& problem) const override
+                virtual bool operator()(ContractionProblemGemm const& problem) const override
                 {
                     return problem.arithmeticIntensity() <= value;
                 }
 
-                virtual bool debugEval(ContractionProblem const& problem,
+                virtual bool debugEval(ContractionProblemGemm const& problem,
                                        std::ostream&             stream) const override
                 {
                     bool rv = (*this)(problem);

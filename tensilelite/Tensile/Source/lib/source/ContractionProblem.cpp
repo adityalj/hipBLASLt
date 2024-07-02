@@ -1066,7 +1066,7 @@ namespace Tensile
             TENSILE_ASSERT_EXC(dUse == 1);
     }
 
-    void ContractionProblem::calcArithmeticIntensity()
+    void ContractionProblemGemm::calcArithmeticIntensity()
     {
         size_t problemSize = 1;
         for(size_t i = 0; i < m_problemSizes.size(); ++i)
