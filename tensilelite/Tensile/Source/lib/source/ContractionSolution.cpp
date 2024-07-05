@@ -2763,8 +2763,40 @@ namespace Tensile
             // size *= batches; // TODO need tile and flag per batch
         }
         else
-            size += problem.d().totalLogicalElements() * sizeMapping.workspaceSizePerElemC;
+        {
+            // TODO: Pass GSU from problem and change value[2] to gsu if gsu != default value
+            size_t gsu
+                = problem.getParams().gsu() > 0 ? problem.getParams().gsu() : sizeMapping.globalSplitU;
+            size_t gsuMultiplier = gsu > 1 ? gsu : 0;
 
+            size += problem.d().totalLogicalElements() * sizeMapping.workspaceSizePerElemC
+                    * gsuMultiplier;
+            if(problemType.useGradient && problemType.useBias
+               && problem.getParams().biasEnum() != DataType::None)
+            {
+                if(problem.biasSrc() == ContractionProblemGemm::TENSOR::A)
+                {
+                    size += problem.freeSizeA(0) * sizeMapping.workspaceSizePerElemBias * gsuMultiplier;
+                }
+                else if(problem.biasSrc() == ContractionProblemGemm::TENSOR::B)
+                {
+                    size += problem.freeSizeB(0) * sizeMapping.workspaceSizePerElemBias * gsuMultiplier;
+                }
+                else if(problem.biasSrc() == ContractionProblemGemm::TENSOR::D && (gsuMultiplier == 0))
+                {
+                    size += problem.d().totalLogicalElements() * sizeMapping.workspaceSizePerElemBias
+                            * gsu;
+                }
+            }
+
+            // Custom kernel synchronizer
+            if(gsu > 1 && sizeMapping.globalAccumulation == 3)
+            {
+                size += (int)ceil(problem.d().sizes()[0] / (float)sizeMapping.macroTile.x)
+                        * (int)ceil(problem.d().sizes()[1] / (float)sizeMapping.macroTile.y)
+                        * sizeMapping.waveNum * sizeof(int32_t);
+            }
+        }
         return size;
     }
 

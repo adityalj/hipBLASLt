@@ -2007,6 +2007,7 @@ void _convertToHeuristicResultArray(
     int*                                                        returnAlgoCount,
     size_t                                                      maxWorkSpaceBytes,
     const Tensile::ContractionProblemGemm&                      problem,
+    const Tensile::Hardware&                                   hardware,
     size_t                                                      fallbackCount)
 {
     *returnAlgoCount = std::min((int)solutions.size(), requestedAlgoCount);
@@ -2019,7 +2020,7 @@ void _convertToHeuristicResultArray(
         heuristicResultsArray[i].algo.max_workspace_bytes = maxWorkSpaceBytes;
         heuristicResultsArray[i].algo.fallback            = fallbackCount-- > 0 ? true : false;
         heuristicResultsArray[i].state                    = rocblaslt_status_success;
-        heuristicResultsArray[i].workspaceSize = solution->requiredWorkspaceSize(problem, nullptr);
+        heuristicResultsArray[i].workspaceSize = solution->requiredWorkspaceSize(problem, hardware);
     }
     for(size_t i = *returnAlgoCount; i < requestedAlgoCount; i++)
     {
@@ -2177,6 +2178,7 @@ rocblaslt_status getBestSolutions(RocblasltContractionProblem const& prob,
                                    returnAlgoCount,
                                    maxWorkSpaceBytes,
                                    data->problem,
+                                   hardware,
                                    fallbackSize);
 
     return rocblaslt_status_success;
@@ -2719,6 +2721,7 @@ rocblaslt_status getBestSolutions(rocblaslt_handle       handle,
                                        &returnAlgoCount,
                                        workspaceBytes,
                                        data->problem,
+                                       hardware,
                                        fallbackSize);
     }
     else if(gemmType == rocblaslt::RocGemmType::ROCBLASLT_GROUPED_GEMM)
@@ -2786,6 +2789,7 @@ rocblaslt_status getBestSolutions(rocblaslt_handle       handle,
                                        &returnAlgoCount,
                                        workspaceBytes,
                                        data->problem.gemms[0],
+                                       hardware,
                                        solutions_fallback.size());
     }
 
