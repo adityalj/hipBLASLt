@@ -2558,6 +2558,7 @@ namespace Tensile
     std::vector<KernelInvocation>
         ContractionSolution::solveGroupedGemmGPU(std::vector<Problem> const& problems,
                                                  GroupedInputs const&        inputs,
+                                                 Hardware const&             hardware,
                                                  const void*                 dUA,
                                                  const void*                 workspace,
                                                  hipStream_t                 stream) const
@@ -2621,7 +2622,7 @@ namespace Tensile
             throw std::runtime_error("Unsupported Device memory type.");
         }
 
-        return solveGroupedGemmGPU(problems, inputs, *dUA, inputs.ws, stream);
+        return solveGroupedGemmGPU(problems, inputs,hardware, *dUA, inputs.ws, stream);
     }
 
     void ContractionSolution::relaseDeviceUserArgs(void* dUA, void* dUAHost)
@@ -2824,7 +2825,7 @@ namespace Tensile
         return sizeInByte;
     }
 
-    size_t ContractionSolution::requiredHostSizeGroupedGemmSingle(Problem const& problem) const
+    size_t ContractionSolution::requiredHostSizeGroupedGemmSingle(Problem const& problem, Hardware const& hardware) const
     {
         if(!problemType.groupedGemm)
             return 0;

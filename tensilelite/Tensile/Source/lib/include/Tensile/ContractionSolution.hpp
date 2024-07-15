@@ -328,6 +328,7 @@ namespace Tensile
         virtual std::vector<KernelInvocation>
             solveGroupedGemmGPU(std::vector<Problem> const& problems,
                                 GroupedInputs const&        inputs,
+                                Hardware const&             hardware,
                                 const void*                 dUA,
                                 const void*                 workspace,
                                 hipStream_t                 stream) const;
