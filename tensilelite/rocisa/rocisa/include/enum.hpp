@@ -192,7 +192,13 @@ namespace rocisa
         CVT_SCALEF32_SR_FP8_F16 = 21,
         CVT_SCALEF32_SR_BF8_F16 = 22,
         CVT_BF16_to_F32         = 23,
-        CVT_PK_F32_to_BF16      = 24
+        CVT_PK_F32_to_BF16      = 24,
+        CVT_SCALEF32_SR_FP8_BF16 = 25,
+        CVT_SCALEF32_SR_BF8_BF16 = 26,
+        CVT_SR_F32_to_BF16       = 27,
+        CVT_SR_F32_to_F16        = 28,
+        CVT_SCALEF32_SR_BF8_F32 = 29,
+        CVT_SCALEF32_SR_FP8_F32 = 30
     };
 
     enum class RoundType : int

@@ -9035,6 +9035,7 @@ class KernelWriterAssembly(KernelWriter):
 
                 newBlockWidth = (tP["bpeGR"] / tP["bpe"]) * blockWidth
                 if newBlockWidth == 0.5:
+                  #print("New instruction can not be used for f8 conversion")
                   # We cannot use optimized f16->fp8 instruction here as we have only one half element to be converted
                   # and we only have a pack instruction which can convert 2 half elements to 2 f8 element
                   if kernel["ProblemType"]["StochasticRounding"]:
@@ -9082,12 +9083,24 @@ class KernelWriterAssembly(KernelWriter):
                   vgprTmp2 = vgprTmp + 1
                   for vi in range(0, int(newBlockWidth)):
                     sel = 1 if vi %2 == 1 else 0
-                    if self.states.asmCaps["Hascvtfp8_f16"] and not kernel["ProblemType"]["StochasticRounding"] and not kernel["ProblemType"]["UseScaleAB"] == "Scalar":
-                      if (toF8):
-                        localWriteCVTCode.add(VCvtScalePkF16toFP8(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi//2)), src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)), scale=0x3f800000,\
-                                                              vop3=VOP3PModifiers(op_sel=[0,0,sel]), comment="convert F16 to F8"))
+                    if self.states.asmCaps["Hascvtfp8_f16"] and not kernel["ProblemType"]["UseScaleAB"] == "Scalar":
+                      if kernel["ProblemType"]["StochasticRounding"]:
+                        print("Using New Stochastic Rounding for F8")
+                        vRand = vgprTmp+2
+                        if self.states.asmCaps["v_prng_b32"]:
+                          localWriteCVTCode.add(VPrngB32(dst=vgpr(vRand),src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)),comment="Psudo Random Number Generator"))
+                        if (toF8):
+                          localWriteCVTCode.add(VCvtScaleSRF16toFP8(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi//2)), src0=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)), src1=vgpr(vRand), scale=0x3f800000,\
+                                                              vop3=VOP3PModifiers(op_sel=[0,0,sel]), comment="convert F16 to F8 SR"))
+                        else:
+                          localWriteCVTCode.add(VCvtScaleSRF16toBF8(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi//2)), src0=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)), src1=vgpr(vRand), scale=0x3f800000,\
+                                                              vop3=VOP3PModifiers(op_sel=[0,0,sel]), comment="convert F16 to BF8 SR"))
                       else:
-                        localWriteCVTCode.add(VCvtScalePkF16toBF8(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi//2)), src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)), scale=0x3f800000,\
+                        if (toF8):
+                          localWriteCVTCode.add(VCvtScalePkF16toFP8(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi//2)), src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)), scale=0x3f800000,\
+                                                              vop3=VOP3PModifiers(op_sel=[0,0,sel]), comment="convert F16 to F8"))
+                        else:
+                          localWriteCVTCode.add(VCvtScalePkF16toBF8(dst=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi//2)), src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)), scale=0x3f800000,\
                                                               vop3=VOP3PModifiers(op_sel=[0,0,sel]), comment="convert F16 to BF8"))
                     else:
                       localWriteCVTCode.add(VCvtF16toF32(dst=vgpr(vgprTmp), src=vgpr(destVgprPrefix + "+%u+%u"%(g2lIdx, vi)), sdwa=SDWAModifiers(src0_sel=SelectBit.WORD_0), comment="convert to F32"))

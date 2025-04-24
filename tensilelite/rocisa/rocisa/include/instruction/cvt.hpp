@@ -489,12 +489,13 @@ namespace rocisa
     struct VCvtScaleSRF16toFP8 : public VCvtInstruction
     {
         VCvtScaleSRF16toFP8(const std::shared_ptr<RegisterContainer>& dst,
-                       const std::shared_ptr<Container>&         src,
+                       const InstructionInput&                   src0,
+                       const InstructionInput&                   src1,
                        const InstructionInput&                   scale,
                        std::optional<SDWAModifiers>              sdwa    = std::nullopt,
                        std::optional<VOP3PModifiers>             vop3    = std::nullopt,
                        const std::string&                        comment = "")
-            : VCvtInstruction(CvtType::CVT_SCALEF32_SR_FP8_F16, dst, {src, scale}, sdwa, vop3, comment)
+            : VCvtInstruction(CvtType::CVT_SCALEF32_SR_FP8_F16, dst, {src0, src1, scale}, sdwa, vop3, comment)
         {
             setInst("v_cvt_scalef32_sr_fp8_f16");
         }
@@ -513,12 +514,13 @@ namespace rocisa
     struct VCvtScaleSRF16toBF8 : public VCvtInstruction
     {
         VCvtScaleSRF16toBF8(const std::shared_ptr<RegisterContainer>& dst,
-                       const std::shared_ptr<Container>&         src,
+                       const InstructionInput&                   src0,
+                       const InstructionInput&                   src1,
                        const InstructionInput&                   scale,
                        std::optional<SDWAModifiers>              sdwa    = std::nullopt,
                        std::optional<VOP3PModifiers>             vop3    = std::nullopt,
                        const std::string&                        comment = "")
-            : VCvtInstruction(CvtType::CVT_SCALEF32_SR_BF8_F16, dst, {src, scale}, sdwa, vop3, comment)
+            : VCvtInstruction(CvtType::CVT_SCALEF32_SR_BF8_F16, dst, {src0, src1, scale}, sdwa, vop3, comment)
         {
             setInst("v_cvt_scalef32_sr_bf8_f16");
         }

@@ -226,6 +226,11 @@ inline std::map<std::string, int>
                                        "v_cvt_scalef32_f16_fp8 v[0], v[1], 0 op_sel:[0,0,0,0]",
                                        isDebug);
 
+    rv["Hascvt_sr_fp8_f16"] = tryAssembler(isaVersion,
+                                        assemblerPath,
+                                        "v_cvt_scalef32_sr_fp8_f16 v[0], v[1], 0 op_sel:[0,0,0,0]",
+                                        isDebug);
+                                        
     rv["HasLDSTr"] = tryAssembler(
         isaVersion, assemblerPath, "ds_read_b64_tr_b16 v[0:1], v0 offset: 0", isDebug);
 
