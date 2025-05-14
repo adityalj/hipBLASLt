@@ -2775,6 +2775,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
         module.add(self.closePrefetchGlobalRead2())
 
+
       # prefetch-local
       if self.states.numItersPLR:
         # not generate wait for local write if LDS write code is not generated
@@ -2783,6 +2784,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
         module.add(self._syncThreads(kernel))
 
         # in some cases need an extra copy of the LDS read with appropriate double buffer offsets
+        
         for plrIdx in range(0, self.states.numItersPLR):
           pack[plrIdx] = Module()
           for espi in range(0, 1):
@@ -2813,6 +2815,47 @@ class KernelWriter(metaclass=abc.ABCMeta):
               if iui*self.states.numReadsIterCoalescedB < kernel["InnerUnroll"]:
                 module.addComment1("local read inc b")
                 module.add(self.localReadInc(kernel, iui, tensorParametersB))
+      
+      D_U_iseqMI_K = 1
+      kernel["numSubTilesA"] = 1
+      kernel["numSubTilesB"] = 1               
+      kernel["SubTileIdxA"] = 0
+      kernel["SubTileIdxB"] = 0             
+
+      if D_U_iseqMI_K:
+        # not generate wait for local write if LDS write code is not generated
+        if not kernel["NoLdsWriteCode"]:
+          module.add(self._wait(kernel, tensorParametersA, tensorParametersB, -1, 0, -1, "0prefetch wait for local write"))
+        module.add(self._syncThreads(kernel))
+        kernel["numSubTilesA"] = 2
+        kernel["numSubTilesB"] = 2
+        kernel["SubTileIdxA"] = 0
+        kernel["SubTileIdxB"] = 0             
+        # in some cases need an extra copy of the LDS read with appropriate double buffer offsets
+        
+        for plrIdx in range(0, 1):
+          pack[plrIdx] = Module()
+          for espi in range(0, 1):
+            for iui in range(0,kernel["InnerUnroll"]):
+              if iui*self.states.numReadsIterCoalescedA < kernel["InnerUnroll"]:
+                module.addComment1("local read prefetch a")
+                localReadCodeA, packCodeA = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadA, iui*self.states.numReadsIterCoalescedA, espi, tensorParametersA)
+                module.add(localReadCodeA)
+                pack[plrIdx].add(packCodeA)
+              if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
+                if iui*self.states.numReadsIterCoalescedMetadata < kernel["InnerUnroll"]:
+                  module.addComment1("local read prefetch metadata")
+                  localReadCodeM, packCodeM = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadMetadata, iui*self.states.numReadsIterCoalescedMetadata, espi, tPM)
+                  module.add(localReadCodeM)
+                  pack[plrIdx].add(packCodeM)
+              if iui*self.states.numReadsIterCoalescedB < kernel["InnerUnroll"]:
+                module.addComment1("local read prefetch b")
+                localReadCodeB, packCodeB = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadB, iui*self.states.numReadsIterCoalescedB, espi, tensorParametersB)
+                module.add(localReadCodeB)
+                pack[plrIdx].add(packCodeB)
+        kernel["SubTileIdxA"] = (kernel["SubTileIdxA"] + 1) % kernel["numSubTilesA"]
+        kernel["SubTileIdxB"] = (kernel["SubTileIdxB"] + 1) % kernel["numSubTilesB"]
+
       module.add(self.closeSumAtLeastUnroll(kernel, tensorParametersA, tensorParametersB, prefetch=True, isOptNLL=False, isNGLL=False))
 
     loopCopies = 2 if expand else 1
