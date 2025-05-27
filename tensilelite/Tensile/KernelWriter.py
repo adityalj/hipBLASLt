@@ -584,6 +584,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     globalReadCode       = deepcopy(self.codes.perIterGlobalRead[iteration])
     localWriteCodeCounts = self.codes.perIterLocalWrite[iteration][0]
     localWriteCode       = self.codes.perIterLocalWrite[iteration][1]
+    print("localWriteCode",localWriteCode)
     isBarrier            = kernel["LoopIters"] - self.states.numItersPLR
     hasLocalRead = countLocalRead(localReadCode)
     # Default schedule is other, local reads, then local writes:
@@ -783,7 +784,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       #####
       # Prepare localReadCode
       ####
-      localReadCodeAB = Module()
+      localReadCodeAB = Module()      
       for iui in range(kernel["InnerUnroll"]):
         localReadCodeA = localReadCode.findNamedItem("LocalReadDoA_I%s"%(iui))
         localReadCodeB = localReadCode.findNamedItem("LocalReadDoB_I%s"%(iui))
@@ -2472,6 +2473,9 @@ class KernelWriter(metaclass=abc.ABCMeta):
     ############################################################################
 
     # double/quadruple the number of compute loop for each DepthU's worth of data read
+    kernel["LoopIters"] = 4 
+    localWriteEndIter = 2 
+    self.states.numMfmaPerIter = self.states.numMfmaPerIter//4
     for uIdx in range(0, kernel["LoopIters"]):
       u = uIdx % kernel["LoopIters"]    #   u: index in compute loop (in contrast to the notion of global read loop)
       if u==0: # if at start of subloop...
@@ -2539,9 +2543,17 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
       hasLiveLdsData = kernel["PrefetchGlobalRead"]
       # reads for current loop are done in previous iteration because of wider local read
-      doReadA = (u < kernel["LoopIters"]/self.states.numIterPerCoalescedReadA - self.states.numItersPLR)
-      doReadB = (u < kernel["LoopIters"]/self.states.numIterPerCoalescedReadB - self.states.numItersPLR)
-      doReadM = (u < kernel["LoopIters"]/self.states.numIterPerCoalescedReadMetadata - self.states.numItersPLR)
+      #doReadA = (u < kernel["LoopIters"]/self.states.numIterPerCoalescedReadA - self.states.numItersPLR)
+      #doReadB = (u < kernel["LoopIters"]/self.states.numIterPerCoalescedReadB - self.states.numItersPLR)
+      #doReadM = (u < kernel["LoopIters"]/self.states.numIterPerCoalescedReadMetadata - self.states.numItersPLR)
+      doReadA = 0
+      doReadB = 0
+      doReadM = 0
+
+      if u==0:
+        doReadA = 1
+        doReadB = 1
+        doReadM = 1
       # reads for next loop
       doReadA = doReadA or (hasLiveLdsData and u > localWriteEndIter)
       doReadB = doReadB or (hasLiveLdsData and u > localWriteEndIter)
@@ -2670,9 +2682,14 @@ class KernelWriter(metaclass=abc.ABCMeta):
       # Is this test necessary because of the global variable this if was previously always true
       # after removing the global variable it is always false...
       # if self.states.numItersPLR:
+      print("u=", u, "slocalReads=", localReads)
+      print("macIterCode = ", macIterCode)
       subIterCode = self._makeSubIterSchedule(kernel, tensorParametersA, tensorParametersB, localReads, \
                       u, pointerLWCode, pointerLRCode, waitCode, macIterCode, waitLWCode, syncCode, pack[luIdx], module)
       module.add(subIterCode) # add scheduled "other", local reads, local writes
+      kernel["SubTileIdxA"] = (kernel["SubTileIdxA"] + 1) % kernel["numSubTilesA"]
+      kernel["SubTileIdxB"] = (kernel["SubTileIdxB"] + 1) % kernel["numSubTilesB"]
+
       pack[luIdx] = Module()
 
     # close unrolled loop
@@ -2833,6 +2850,47 @@ class KernelWriter(metaclass=abc.ABCMeta):
               if iui*self.states.numReadsIterCoalescedB < kernel["InnerUnroll"]:
                 module.addComment1("local read inc b")
                 module.add(self.localReadInc(kernel, iui, tensorParametersB))
+      
+      D_U_iseqMI_K = 1
+      kernel["numSubTilesA"] = 1
+      kernel["numSubTilesB"] = 1               
+      kernel["SubTileIdxA"] = 0
+      kernel["SubTileIdxB"] = 0             
+
+      if D_U_iseqMI_K:
+        # not generate wait for local write if LDS write code is not generated
+        if not kernel["NoLdsWriteCode"]:
+          module.add(self._wait(kernel, tensorParametersA, tensorParametersB, -1, 0, -1, "0prefetch wait for local write"))
+        module.add(self._syncThreads(kernel))
+        kernel["numSubTilesA"] = 2
+        kernel["numSubTilesB"] = 2
+        kernel["SubTileIdxA"] = 0
+        kernel["SubTileIdxB"] = 0             
+        # in some cases need an extra copy of the LDS read with appropriate double buffer offsets
+        
+        for plrIdx in range(0, 1):
+          pack[plrIdx] = Module()
+          for espi in range(0, 1):
+            for iui in range(0,kernel["InnerUnroll"]):
+              if iui*self.states.numReadsIterCoalescedA < kernel["InnerUnroll"]:
+                module.addComment1("local read prefetch a")
+                localReadCodeA, packCodeA = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadA, iui*self.states.numReadsIterCoalescedA, espi, tensorParametersA)
+                module.add(localReadCodeA)
+                pack[plrIdx].add(packCodeA)
+              if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
+                if iui*self.states.numReadsIterCoalescedMetadata < kernel["InnerUnroll"]:
+                  module.addComment1("local read prefetch metadata")
+                  localReadCodeM, packCodeM = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadMetadata, iui*self.states.numReadsIterCoalescedMetadata, espi, tPM)
+                  module.add(localReadCodeM)
+                  pack[plrIdx].add(packCodeM)
+              if iui*self.states.numReadsIterCoalescedB < kernel["InnerUnroll"]:
+                module.addComment1("local read prefetch b")
+                localReadCodeB, packCodeB = self.localReadDo(kernel, plrIdx*self.states.numIterPerCoalescedReadB, iui*self.states.numReadsIterCoalescedB, espi, tensorParametersB)
+                module.add(localReadCodeB)
+                pack[plrIdx].add(packCodeB)
+        kernel["SubTileIdxA"] = (kernel["SubTileIdxA"] + 1) % kernel["numSubTilesA"]
+        kernel["SubTileIdxB"] = (kernel["SubTileIdxB"] + 1) % kernel["numSubTilesB"]
+
       module.add(self.closeSumAtLeastUnroll(kernel, tensorParametersA, tensorParametersB, prefetch=True, isOptNLL=False, isNGLL=False))
 
     loopCopies = 2 if expand else 1
