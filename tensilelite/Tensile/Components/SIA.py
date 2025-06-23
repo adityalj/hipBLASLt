@@ -763,6 +763,7 @@ def schedLocalWrite(writer, kernel, numLocalWriteModPerIter, numLocalWritesPerSc
 
     itemsLWToSchedIndexLast = 0
     for u in range(startIter, localWriteEndIter+1):
+        numLocalWriteModPerIter = 960
         itemsLWToSchedLength = itemsLWToSched[-1][0] if itemsLWToSched else 0
         if u == localWriteEndIter:
             itemPerIter = itemsLWToSchedLength # schedule all remaining activity
