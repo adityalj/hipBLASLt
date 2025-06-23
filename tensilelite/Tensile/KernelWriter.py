@@ -2219,10 +2219,12 @@ class KernelWriter(metaclass=abc.ABCMeta):
             # Swap, reset, or increment the LRO:
             # force internalPointerSwap = False in NGLL case
             internalPointerSwap = expand and not isNGLL
-            pointerLRCode.addComment1("local read swap offsets a")
-            pointerLRCode.add(self.localReadSwapOffsets(kernel, internalPointerSwap, tensorParametersA))
-            pointerLRCode.addComment1("local read swap offsets b")
-            pointerLRCode.add(self.localReadSwapOffsets(kernel, internalPointerSwap, tensorParametersB))
+            if doReadA and (u<localWriteEndIter):
+              pointerLRCode.addComment1("local read swap offsets a")
+              pointerLRCode.add(self.localReadSwapOffsets(kernel, internalPointerSwap, tensorParametersA))
+            if doReadB and (u<localWriteEndIter):
+              pointerLRCode.addComment1("local read swap offsets b")
+              pointerLRCode.add(self.localReadSwapOffsets(kernel, internalPointerSwap, tensorParametersB))
             if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
               pointerLRCode.addComment1("local read swap offsets metadata")
               pointerLRCode.add(self.localReadSwapOffsets(kernel, internalPointerSwap, tPM))
@@ -2635,13 +2637,15 @@ class KernelWriter(metaclass=abc.ABCMeta):
           if kernel["ExpertSchedulingMode"] > 0:
             pointerLRCode.add(SWaitAlu(vm_vsrc=0, comment="wait for local read to vgpr complete"))
           # Swap, reset, or increment the LRO:
-          pointerLRCode.addComment1("local read swap offsets a")
-          pointerLRCode.add(self.localReadSwapOffsets(kernel, expand, tensorParametersA))
-          if kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
+          if doReadA and (u<localWriteEndIter):
+            pointerLRCode.addComment1("local read swap offsets a")
+            pointerLRCode.add(self.localReadSwapOffsets(kernel, expand, tensorParametersA))
+          if doReadM:#kernel["ProblemType"]["Sparse"] and not kernel["DirectToVgprSparseMetadata"]:
             pointerLRCode.addComment1("local read swap offsets metadata")
             pointerLRCode.add(self.localReadSwapOffsets(kernel, expand, tPM))
-          pointerLRCode.addComment1("local read swap offsets b")
-          pointerLRCode.add(self.localReadSwapOffsets(kernel, expand, tensorParametersB))
+          if doReadB and (u<localWriteEndIter):
+            pointerLRCode.addComment1("local read swap offsets b")
+            pointerLRCode.add(self.localReadSwapOffsets(kernel, expand, tensorParametersB))
 
       if isResetLroIter: # ResetLroIter
         pointerLRCode.addComment1("local read init pointers a")
