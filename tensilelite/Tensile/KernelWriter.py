@@ -1268,6 +1268,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
             iterCode.add(SSetPrior(prior=3, comment="store optimization"))
         if (mfmaIndex >= self.states.lwStartMfmaIndex):
           numLoops, itemCounter = calculateRangeAndUpdateCounter(itemCounter, localWriteCodeCounts, self.states.numLocalWriteModPerMfma)
+          if kernel["D_U_iseqMI_K"]:
+            numLoops = 2
           for j in range(min(len(writeItems), numLoops)):
             # in case there are localWrite and globalread in same iteration
             # we need to make sure globalRead before localWrite
