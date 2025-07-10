@@ -6757,10 +6757,12 @@ class KernelWriterAssembly(KernelWriter):
       if numSubTiles > 1:
         outerBy2=(kernel["MIWaveTile"][outer]//numSubTiles)
         innerBy2=(kernel["MIWaveTile"][inner]//numSubTiles)
+        outerMod2=(kernel["MIWaveTile"][outer]%numSubTiles)
+        innerMod2=(kernel["MIWaveTile"][inner]%numSubTiles)
         idxHalfO = u//numSubTiles
         idxHalfI = u % numSubTiles
-        idxOuter_start = outerBy2*idxHalfO
-        idxInner_start = innerBy2*idxHalfI
+        idxOuter_start = (outerBy2 + outerMod2)*idxHalfO 
+        idxInner_start = (innerBy2 + innerMod2)*idxHalfI 
         idxOuter_stop = kernel["MIWaveTile"][outer] - (1-idxHalfO)* outerBy2
         idxInner_stop = kernel["MIWaveTile"][inner] - (1-idxHalfI)* innerBy2
 

@@ -39,7 +39,7 @@ from rocisa.instruction import BufferLoadB128, BufferLoadB32, BufferLoadB64, \
   SLongBranchPositive, VFmaMixF32, VMadMixF32, VMovB32
 from rocisa.register import RegisterPool
 from rocisa.enum import RegisterType
-
+import math
 from .KernelWriterModules import *
 from .Component import Component, LraTileProperties
 from .Components.Signature import UserArgumentsInfo
@@ -769,6 +769,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       isBarrier = kernel["LoopIters"] - self.states.numItersPLR
       writeItems = list(localWriteCode.items())
       macIterItems = macIterCode.flatitems()
+      numMfmaPerIter = len(macIterItems)
       skipLocalWriteWaitcnt = 0
       localReadsWaitcnt = 0
       localReadsIssuedInThisIter = 0
@@ -1112,7 +1113,8 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
       itemCounter = 0
       for i in range(numMfmaPerIter):
-        mfmaIndex = iteration * numMfmaPerIter + i
+        kernel["mfmaIndex"] = kernel["mfmaIndex"] + 1
+        mfmaIndex = kernel["mfmaIndex"]
         insertInst = countInstruction(iterCode)
         iterCode.addComment0(" mfmaIndex:%u " %(mfmaIndex))
 
@@ -1741,7 +1743,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
           if ((iteration < numReadsIterB and not dataAtIterB < max(dataAtIterA,dataAtIterB)) or numPrefetchIter) and (not kernel["DirectToVgprB"]):
             localReads -= self.states.numReadsPerIterB
           localReads += localReadsWaitcnt
-          if iteration == 0 and kernel["UnrollMajorLDSB"] and not (kernel["ProblemType"]["DataTypeB"].isAnyFloat8() and kernel["ConvertAfterDS"]):
+          if iteration == 0 and kernel["UnrollMajorLDSB"] and not (kernel["D_U_iseqMI_K"] or (kernel["ProblemType"]["DataTypeB"].isAnyFloat8() and kernel["ConvertAfterDS"])):
             # We issued LR with A[0]->B[0]->A[1:]->B[1:] order.
             # We need to calculate how many B[N:] needed by 1st mfma.
             # If not UnrollMajorLDSB, we have packB which will be issued ahead.
@@ -2053,7 +2055,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
       # for MFMA, use opposite side
       vregSetIdxMFMA = 1 - vregSetIdxGR
     tPM = tensorParametersA["tpsMetadata"] if tensorParametersA["is_sparse"] else tensorParametersB["tpsMetadata"]
-
+    kernel["mfmaIndex"] = -1  # reset mfmaIndex for noLoadLoopBody
     for uIdx in range(0, kernel["LoopIters"]):
       u = uIdx % kernel["LoopIters"]    #   u: index in compute loop (in contrast to the notion of global read loop)
       isLastLoop = not isNGLL
@@ -2091,12 +2093,22 @@ class KernelWriter(metaclass=abc.ABCMeta):
           self.makeSchedule(kernel, tensorParametersA, tensorParametersB, localWriteEndIter, skipGlobalReadInc=False, lastLoop=NLLlast, isNGLL=isNGLL)
           module.add(self.codes.unrollLoopHeader)
 
+      if kernel["D_U_iseqMI_K"]:
+        mfmaiter0 =  math.ceil(kernel["MIWaveTile"][0]/2) * math.ceil(kernel["MIWaveTile"][1]/2)
+        mfmaiter1 = math.floor(kernel["MIWaveTile"][0]/2) * math.ceil(kernel["MIWaveTile"][1]/2)
+        mfmaiter2 = math.ceil(kernel["MIWaveTile"][0]/2) * math.floor(kernel["MIWaveTile"][1]/2)
+        self.states.lwStartMfmaIndex = math.floor((kernel["MIWaveTile"][1] + kernel["MIWaveTile"][0]/2)) -1
+        self.states.syncPlrMfmaIndex = mfmaiter0 + mfmaiter1 + mfmaiter2
+
       # which loop iteration to reset the LRO,
       # note if PLR=0, isResetLroIter is False for all u
       isResetLroIter = 1 if kernel["D_U_iseqMI_K"] else (u == localWriteEndIter)
       isSwapAndResetLwoIter = isResetLroIter
       isSwapLroIter = isResetLroIter
       if kernel["ScheduleIterAlg"] == 3:
+        if kernel["D_U_iseqMI_K"]:
+          isSwapAndResetLwoIter = (u == 2)
+        else:
           isSwapAndResetLwoIter = (u == self.states.lwEndMfmaIndex//(self.states.numMfmaPerIter))
 
       extraComment = ""
@@ -2481,7 +2493,7 @@ class KernelWriter(metaclass=abc.ABCMeta):
     ############################################################################
     # unrolled loop: mac iterations
     ############################################################################
-
+    kernel["mfmaIndex"] = -1
     # double/quadruple the number of compute loop for each DepthU's worth of data read
     for uIdx in range(0, kernel["LoopIters"]):
       u = uIdx % kernel["LoopIters"]    #   u: index in compute loop (in contrast to the notion of global read loop)
@@ -2504,11 +2516,22 @@ class KernelWriter(metaclass=abc.ABCMeta):
 
       # which loop iteration to reset the LRO,
       # note if PLR=0, isResetLroIter is False for all u
+      if kernel["D_U_iseqMI_K"]:
+        mfmaiter0 =  math.ceil(kernel["MIWaveTile"][0]/2) * math.ceil(kernel["MIWaveTile"][1]/2)
+        mfmaiter1 = math.floor(kernel["MIWaveTile"][0]/2) * math.ceil(kernel["MIWaveTile"][1]/2)
+        mfmaiter2 = math.ceil(kernel["MIWaveTile"][0]/2) * math.floor(kernel["MIWaveTile"][1]/2)
+        self.states.lwStartMfmaIndex = math.floor((kernel["MIWaveTile"][1] + kernel["MIWaveTile"][0]/2)) -1
+        self.states.syncPlrMfmaIndex = mfmaiter0 + mfmaiter1 + mfmaiter2
+        #self.states.lwEndMfmaIndex = min(self.states.syncPlrMfmaIndex-1 ,self.states.lwStartMfmaIndex + kernel["MIWaveTile"][1] + kernel["MIWaveTile"][0])
+        
       isResetLroIter = 1 if kernel["D_U_iseqMI_K"] else (u == localWriteEndIter)
       isSwapAndResetLwoIter = isResetLroIter
       isSwapLroIter = isResetLroIter
       if kernel["ScheduleIterAlg"] == 3:
-        isSwapAndResetLwoIter = (u == self.states.lwEndMfmaIndex//(self.states.numMfmaPerIter))
+        if kernel["D_U_iseqMI_K"]:
+          isSwapAndResetLwoIter = (u == 2)
+        else:
+          isSwapAndResetLwoIter = (u == self.states.lwEndMfmaIndex//(self.states.numMfmaPerIter))
       extraComment = ""
       if isResetLroIter:
         extraComment += " (reset local read pointers iteration) "

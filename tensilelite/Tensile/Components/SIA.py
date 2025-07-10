@@ -257,6 +257,8 @@ def getLocalWriteMFMAEnd(writer, kernel, tensorParametersA, tensorParametersB):
         writer.states.numMfmaForNextLoopLR += 1
     # final index definition
     writer.states.numMfmaForNextLoopLR = min(writer.states.numMfmaForNextLoopLR,numMfmaPerIter-1)
+    if kernel["D_U_iseqMI_K"] and ( kernel["MIWaveTile"][0]%2 or kernel["MIWaveTile"][1]%2):  # if WaveTile dimension is odd 
+        writer.states.numMfmaForNextLoopLR = writer.states.numMfmaForNextLoopLR -2
     writer.states.syncPlrMfmaIndex = numMfmaPerIter*(kernel["LoopIters"]-writer.states.numItersPLR+1) - writer.states.numMfmaForNextLoopLR - 1 if writer.states.numItersPLR else 0
     numMfmaBetweenLWandBarrier = 2 if kernel["MatrixInstM"] == 32 else 3
     writer.states.lwEndMfmaIndex = max(writer.states.syncPlrMfmaIndex - numMfmaBetweenLWandBarrier,0) if writer.states.numItersPLR else numMfmaPerIter*kernel["LoopIters"] - 1
